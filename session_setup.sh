@@ -1,35 +1,36 @@
 #!/bin/bash
-# Sessions are the overall 'categories' to make
-# Windows are accessed in the same order and created nested under the associated session
-## Window names in tmux will be the name given, minus the _command or _sh suffix
-## Windows utilise the suffixes of _command or _sh, depending on their usecase
-### _command will run a command directly in the newly created window (example might be changing directory)
-### _sh will run a script (example might be builds)
+# Create new sessions in the /sessions directory
+# Within each session you can define commands and scripts to run
 
-session_to_start_with="misc"
-path_to_window_commands="${HOME}/scripts/tmux/commands"
-path_to_window_scripts="${HOME}/scripts/tmux/scripts"
+## /sessions/<session_name>/commands
+### Use this to run command in the window's terminal session directly
+### Example might be to change a directory
 
-declare -a sessions=(
-    "misc"
-    "cloud"
-    "learn"
-    "workato"
-    "usagedata"
-    "local_jenkins"
-)
+## /sessions/<session_name>/scripts
+### Use this to run a script in the window
+### Example might be to run builds
 
-declare -a windows=(
-    ""
-    "cloud_command cloud_builds_sh"
-    "learn_command learn_builds_sh"
-    "workato_connector_command"
-    "usagedata_athena_command usagedata_collection_command"
-    "local_jenkins_command"
-)
+session_to_start_with="cloud:cloud" # Sets which session:window is set to automatically start with
 
-index=0
-for session_name in "${sessions[@]}"; do
+create_tmux_window() {
+    session_name=$1
+    window_name=$2
+
+    # If the window already exists, we don't do anything
+    if tmux has-session -t "$session_name:$window_name" 2>/dev/null; then
+        echo "Window already exists"
+        return
+    fi
+
+    echo "Creating window $window_name"
+    tmux new-window -a -t "$session_name" -n "$window_name"
+}
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+sessions_base_dir="$SCRIPT_DIR/sessions"
+
+for session_dir in "$sessions_base_dir"/*; do
+    session_name=$(basename "$session_dir")
     # Create the session if it doesn't already exist
     if ! tmux has-session -t "$session_name" 2>/dev/null; then
         echo "Creating session $session_name"
@@ -38,34 +39,21 @@ for session_name in "${sessions[@]}"; do
 
     tmux switch-client -t "$session_name"
 
-    # Convert the session windows to array
-    session_windows=(`echo "${windows[$index]}"`)
+    for window_file in "$session_dir"/commands/*; do
+        window_name=$(basename "$window_file")
+        base_window_name="${window_name%.*}"
+        create_tmux_window "$session_name" "$base_window_name"
 
-    for window_name in "${session_windows[@]}"; do
-        # Extract base window name without suffix
-        base_window_name="${window_name%_*}"
-
-        # If the window already exists, we don't do anything
-        if tmux has-session -t "$session_name:$base_window_name" 2>/dev/null; then
-            echo "Window already exists"
-            continue
-        fi
-
-        echo "Creating window $window_name"
-        tmux new-window -a -t "$session_name" -n "$base_window_name"
-
-        # Bit rough here, better implementation if I had more time - but will suffice :)
-
-        # Check if bash script exists
-        if [[ "$window_name" =~ _sh$ ]]; then
-            tmux send-keys -t "$session_name:$base_window_name" "sh $path_to_window_scripts/${base_window_name}.sh &" C-m
-        # Check if command script exists
-        elif [[ "$window_name" =~ _command$ ]]; then
-            tmux send-keys -t "$session_name:$base_window_name" "$(cat "$path_to_window_commands/${base_window_name}.sh")" C-m
-        fi
+        tmux send-keys -t "$session_name:$base_window_name" "$(cat "$window_file")" C-m
     done
 
-    ((index++))
+    for window_file in "$session_dir"/scripts/*; do
+        window_name=$(basename "$window_file")
+        base_window_name="${window_name%.*}"
+        create_tmux_window "$session_name" "$base_window_name"
+
+        tmux send-keys -t "$session_name:$base_window_name" "sh $window_file &" C-m
+    done
 done
 
 # Load up tmux server and select the session we want to start with
