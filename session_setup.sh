@@ -39,21 +39,25 @@ for session_dir in "$sessions_base_dir"/*; do
 
     tmux switch-client -t "$session_name"
 
-    for window_file in "$session_dir"/commands/*; do
-        window_name=$(basename "$window_file")
-        base_window_name="${window_name%.*}"
-        create_tmux_window "$session_name" "$base_window_name"
+    if [[ -d "$session_dir/commands" ]]; then
+        for window_file in "$session_dir"/commands/*; do
+            window_name=$(basename "$window_file")
+            base_window_name="${window_name%.*}"
+            create_tmux_window "$session_name" "$base_window_name"
 
-        tmux send-keys -t "$session_name:$base_window_name" "$(cat "$window_file")" C-m
-    done
+            tmux send-keys -t "$session_name:$base_window_name" "$(cat "$window_file")" C-m
+        done
+    fi
 
-    for window_file in "$session_dir"/scripts/*; do
-        window_name=$(basename "$window_file")
-        base_window_name="${window_name%.*}"
-        create_tmux_window "$session_name" "$base_window_name"
+    if [[ -d "$session_dir/scripts" ]]; then
+        for window_file in "$session_dir"/scripts/*; do
+            window_name=$(basename "$window_file")
+            base_window_name="${window_name%.*}"
+            create_tmux_window "$session_name" "$base_window_name"
 
-        tmux send-keys -t "$session_name:$base_window_name" "sh $window_file &" C-m
-    done
+            tmux send-keys -t "$session_name:$base_window_name" "sh $window_file &" C-m
+        done
+    fi
 done
 
 # Load up tmux server and select the session we want to start with
